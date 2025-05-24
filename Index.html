@@ -2,20 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>WalletConnect v2 Sepolia</title>
-  <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.9.4/dist/umd/index.min.js"></script>
+  <title>WalletConnect v2 Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Load WalletConnect Ethereum Provider -->
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.9.4/dist/umd/index.min.js"></script>
 </head>
 <body>
-  <h1>WalletConnect v2 Sepolia Test</h1>
+  <h2>Test WalletConnect v2 - Sepolia</h2>
   <button id="connectBtn">Connect Wallet</button>
 
   <script>
-    document.getElementById('connectBtn').onclick = async () => {
+    document.getElementById('connectBtn').addEventListener('click', async () => {
       try {
-        // Use the correct global object
+        // Wait for the WalletConnectProvider class to be available
+        const WalletConnectProvider = window.WalletConnectEthereumProvider;
+
+        if (!WalletConnectProvider) {
+          throw new Error("WalletConnectEthereumProvider is not available.");
+        }
+
         const provider = await WalletConnectProvider.init({
-          projectId: "b49de02b26fcb4c1ad6f4fb0dbd9caff", // Your WalletConnect Project ID
+          projectId: "b49de02b26fcb4c1ad6f4fb0dbd9caff", // Your WalletConnect project ID
           chains: [11155111], // Sepolia
           showQrModal: true,
           rpcMap: {
@@ -23,15 +30,21 @@
           },
         });
 
-        provider.on("connect", () => alert("Wallet Connected!"));
-        provider.on("disconnect", () => alert("Wallet Disconnected"));
+        provider.on("connect", () => {
+          alert("Wallet connected successfully!");
+          console.log("Connected accounts:", provider.accounts);
+        });
+
+        provider.on("disconnect", () => {
+          alert("Wallet disconnected");
+        });
 
         await provider.enable();
       } catch (err) {
         alert("Failed to connect: " + err.message);
         console.error(err);
       }
-    };
+    });
   </script>
 </body>
 </html>
