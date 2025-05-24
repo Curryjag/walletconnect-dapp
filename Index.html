@@ -2,47 +2,67 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>WalletConnect v2 Test</title>
   <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.9.4/dist/umd/index.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 50px;
+    }
+    button {
+      padding: 14px 28px;
+      font-size: 18px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+  </style>
 </head>
 <body>
+  <h1>Connect Wallet (Sepolia)</h1>
   <button id="connectButton">Connect Wallet</button>
 
   <script>
-    const INFURA_PROJECT_ID = "4aa83a1a6d3c4b318c210e38243466c9";
-    const WALLETCONNECT_PROJECT_ID = "b49de02b26fcb4c1ad6f4fb0dbd9caff";
+    document.addEventListener('DOMContentLoaded', () => {
+      const connectButton = document.getElementById('connectButton');
 
-    const EthereumProvider = window.WalletConnectEthereumProvider.EthereumProvider;
+      connectButton.onclick = async () => {
+        console.log("Connect button clicked");
 
-    document.getElementById('connectButton').onclick = async () => {
-      console.log("Button clicked!");
+        try {
+          const provider = await window.WalletConnectEthereumProvider.EthereumProvider.init({
+            projectId: "b49de02b26fcb4c1ad6f4fb0dbd9caff", // WalletConnect project ID
+            chains: [11155111], // Sepolia
+            showQrModal: true,
+            rpcMap: {
+              11155111: "https://sepolia.infura.io/v3/4aa83a1a6d3c4b318c210e38243466c9"
+            }
+          });
 
-      try {
-        const provider = await EthereumProvider.init({
-          projectId: WALLETCONNECT_PROJECT_ID,
-          chains: [11155111], // Sepolia chainId
-          showQrModal: true,
-          rpcMap: {
-            11155111: `https://sepolia.infura.io/v3/${INFURA_PROJECT_ID}`
-          }
-        });
+          provider.on("connect", (info) => {
+            console.log("Connected:", info);
+            alert("Wallet connected!");
+          });
 
-        provider.on("connect", (info) => {
-          console.log("Connected:", info);
-          alert("Wallet connected successfully!");
-        });
+          provider.on("disconnect", (error) => {
+            console.log("Disconnected:", error);
+            alert("Disconnected");
+          });
 
-        provider.on("disconnect", (error) => {
-          console.log("Disconnected:", error);
-          alert("Wallet disconnected");
-        });
-
-        await provider.enable();
-      } catch (err) {
-        console.error("Error connecting wallet:", err);
-        alert("Failed to connect wallet: " + err.message);
-      }
-    };
+          await provider.enable();
+        } catch (err) {
+          console.error("Error connecting wallet:", err);
+          alert("Failed to connect: " + err.message);
+        }
+      };
+    });
   </script>
 </body>
 </html>
