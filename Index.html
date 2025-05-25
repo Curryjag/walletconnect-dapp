@@ -38,7 +38,7 @@
         console.log("Connect button clicked");
 
         try {
-          const EthereumProvider = window.WalletConnectEthereumProvider.EthereumProvider;
+          const EthereumProvider = window.WalletConnectEthereumProvider?.EthereumProvider;
 
           if (!EthereumProvider) {
             throw new Error("EthereumProvider is not available.");
